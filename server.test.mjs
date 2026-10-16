@@ -1,0 +1,11 @@
+import {test,after,before} from 'node:test';
+import assert from 'node:assert/strict';
+import {server,validateFlow} from './server.mjs';
+let base;
+before(async()=>{await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base=`http://127.0.0.1:${server.address().port}`;});
+after(()=>new Promise(resolve=>server.close(resolve)));
+test('all six niches and app shell are served',async()=>{const niches=await (await fetch(base+'/api/niches')).json();assert.equal(niches.length,6);assert.equal(new Set(niches.map(n=>n.id)).size,6);assert.match(await(await fetch(base)).text(),/Reelflow/);});
+test('invalid generation inputs cannot invoke inference',async()=>{const r=await fetch(base+'/api/generate',{method:'POST',body:JSON.stringify({topicId:'invented',duration:30,tone:'Conversational'})});assert.equal(r.status,400);});
+test('cross-origin generation is rejected',async()=>{const r=await fetch(base+'/api/generate',{method:'POST',headers:{Origin:'https://untrusted.example'},body:'{}'});assert.equal(r.status,403);});
+test('unknown paths do not reveal local files',async()=>{const r=await fetch(base+'/server.mjs');assert.equal(r.status,404);});
+test('model output must include four complete scenes in order',()=>{const valid={beats:['Hook','Plot','Twist','Conclusion'].map(stage=>({stage,voiceover:'Line',visual:'Shot',overlay:'Text'}))};assert.equal(validateFlow(valid),valid);assert.throws(()=>validateFlow({beats:valid.beats.slice(0,3)}));assert.throws(()=>validateFlow({beats:[...valid.beats].reverse()}));assert.throws(()=>validateFlow({beats:valid.beats.map(b=>({...b,voiceover:''}))}));});
